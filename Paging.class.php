@@ -4,6 +4,38 @@ namespace FreePBX\modules;
 use BMO;
 use FreePBX_Helpers;
 use PDO;
+
+//Valid authorization types
+enum AuthMode: string {
+	case NONE = 'none';                     // Paging via this page group is allowed for all extensions (default)
+	case PIN = 'pin';                       // A PIN is required to use the page group
+	case WHITELIST = 'whitelist';           // Only whitelisted extensions are allowed
+	case MIXED = 'mixed';                   // Whitelisted extensions can use the page group without entering a PIN; all others must enter the PIN
+	case WHITELIST_PIN = 'whitelist+pin';   // Only whitelisted extensions are allowed, and they must provide the PIN to use the page group
+
+	// Map internal enum values to user-friendly display labels
+	public function label(): string {
+		return match($this) {
+			self::NONE => 'No Authorization',
+			self::PIN => 'PIN',
+			self::WHITELIST => 'Whitelist',
+			self::MIXED => 'Mixed',
+			self::WHITELIST_PIN => 'Whitelist with PIN',
+		};
+	}
+
+	//Help text for the GUI
+	public function help(): string {
+		return match($this) {
+			self::NONE => 'All extensions can call this paging group without restriction.',
+			self::PIN => 'A PIN is required to use the page group',
+			self::WHITELIST => 'Only whitelisted extensions are allowed.',
+			self::MIXED => 'Whitelisted extensions don’t need a PIN. All others must enter a PIN.',
+			self::WHITELIST_PIN => 'Only whitelisted extensions are allowed, and they must enter a PIN.',
+		};
+	}
+}
+
 class Paging extends FreePBX_Helpers implements BMO {
 
 	public function install() {
@@ -132,9 +164,12 @@ class Paging extends FreePBX_Helpers implements BMO {
 				'announcement' => '',
 				'type'			=> 'tool',
 				'volume'		=> 0,
-				'drop_silence'		=>'0'
-
-
+				'drop_silence'		=>'0',
+				'authorization' => '1',
+				'auth_data'     => '',
+				'auth_mode' => AuthMode::NONE->value,
+				'pin'           => '',
+				'whitelist'     => array()
 			);
 
 			foreach ($get_vars as $k => $v) {
@@ -173,13 +208,23 @@ class Paging extends FreePBX_Helpers implements BMO {
 									$amp_conf['PAGINGMAXPARTICIPANTS']);
 							}
 						}
-
+						//prepare authorization data
+						if (!empty($vars['authorization'])) {
+							if ($vars['authorization'] === "0") {
+								$vars['auth_data'] = json_encode(array());
+							} else if ($vars['authorization'] === "1") {
+								$vars['auth_data'] = json_encode(
+									array('pin' => $vars['pin'] ?? '', 'whitelist' => $vars['whitelist'] ?? array()));
+							}
+						}
 						paging_modify(
 							$vars['pagegrp'],
 							$vars['pagenbr'],
 							$vars['pagelist'],
 							$vars['force_page'],
 							$vars['duplex'],
+							$vars['auth_mode'],
+							$vars['auth_data'],
 							$vars['description'],
 							$vars['default_group'],
 							$vars['announcement'],
@@ -502,7 +547,7 @@ class Paging extends FreePBX_Helpers implements BMO {
 		return $results;
 	}
 
-	public function addGroup($xtn, $plist, $force_page, $duplex, $description = '', $default_group = '', $announcement = 0, $volume = 0){
+	public function addGroup($xtn, $plist, $force_page, $duplex, $auth_mode, $auth_data, $description = '', $default_group = '', $announcement = 0, $volume = 0){
 		// $plist contains a string of extensions, with \n as a seperator.
 		// Split that up first.
 		if (is_array($plist)) {
@@ -518,8 +563,8 @@ class Paging extends FreePBX_Helpers implements BMO {
 		}
 
 		$description = trim($description);
-		$sql = "INSERT INTO paging_config(page_group, force_page, duplex, description, announcement, volume) VALUES (:xtn, :force_page, :duplex, :description, :announcement, :volume)";
-		$this->Database->prepare($sql)->execute([':xtn' => $xtn, ':force_page' => $force_page, ':duplex' => $duplex, ':description' => $description, ':announcement' => $announcement, ':volume' => $volume]);
+		$sql = "INSERT INTO paging_config(page_group, force_page, duplex, description, announcement, volume, auth_mode, auth_data) VALUES (:xtn, :force_page, :duplex, :description, :announcement, :volume, :auth_mode, :auth_data)";
+		$this->Database->prepare($sql)->execute([':xtn' => $xtn, ':force_page' => $force_page, ':duplex' => $duplex, ':description' => $description, ':announcement' => $announcement, ':volume' => $volume, ':auth_mode' => $auth_mode, ':auth_data' => $auth_data]);
 
 		if ($default_group) {
 			$this->Database->query("DELETE FROM `admin` WHERE variable = 'default_page_grp'");

@@ -1,4 +1,6 @@
 $(document).ready(function() {
+	toggle_authorization()
+	toggle_auth_data()
 	$('form[name=page_opts_form]').submit(function(){
 		var theForm = document.page_opts_form;
 		if(typeof theForm.schedulerenableyes !== 'undefined' && theForm.schedulerenableyes.checked){
@@ -47,6 +49,21 @@ $(document).ready(function() {
 		if (!/^[0-9*\/#]+$/.test(theForm.pagenbr.value.trim())) {
 			return warnInvalid(theForm.pagenbr, _("Please enter a valid Extension."));
 		}
+
+		// Vallidate Auth Input
+		if (theForm.authorizationyes.checked) {
+			if (!theForm.pin.disabled && !/^\d+$/.test(theForm.pin.value.trim())) {
+				return warnInvalid(theForm.pin, _("Please enter a valid PIN."));
+			}
+			var button = document.querySelector('select#whitelist + .btn-group > button.multiselect');
+			if (button && !button.disabled) {
+				var selected = document.querySelectorAll('select#whitelist option:checked');
+				if (selected.length === 0) {
+					return warnInvalid(button, _("Please select at least one extension."));
+				}
+			}
+		}
+
 		return true;
 	});
 });
@@ -136,4 +153,43 @@ $('#pagelist').multiselect({
 		enableFiltering: true,
 		includeSelectAllOption: true,
 		enableCaseInsensitiveFiltering: true
+});
+
+$('#whitelist').multiselect({
+	enableFiltering: true,
+	includeSelectAllOption: true,
+	enableCaseInsensitiveFiltering: true
+});
+
+function toggle_authorization() {
+	if ($('input[name="authorization"]:checked').val() == '1') {
+		$(".paging-auth").slideDown();
+	} else {
+		$(".paging-auth").slideUp();
+	}
+}
+
+$('[name="authorization"]').change(function () {
+        toggle_authorization();
+});
+
+function toggle_auth_data() {
+	var selected = $('#auth_mode').find(":selected").val();
+	if (selected == 'none') {
+		$('#pin').prop("disabled", true);
+		$('select#whitelist + .btn-group > button.multiselect').prop("disabled", true);
+	} else if (selected == 'pin') {
+		$('#pin').prop("disabled", false);
+		$('select#whitelist + .btn-group > button.multiselect').prop("disabled", true);
+	} else if (selected == 'whitelist') {
+		$('#pin').prop("disabled", true);
+        $('select#whitelist + .btn-group > button.multiselect').prop("disabled", false);
+	} else if (selected == 'mixed' || selected == 'whitelist+pin') {
+		$('#pin').prop("disabled", false);
+		$('select#whitelist + .btn-group > button.multiselect').prop("disabled", false);
+	}
+}
+
+$('[name="auth_mode"]').change(function () {
+	toggle_auth_data();
 });

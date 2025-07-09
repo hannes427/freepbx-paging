@@ -8,6 +8,9 @@ if($extdisplay){
 	extract($thisGRP);
 	$pagenbr = $extdisplay;
 	$pagegrp = $extdisplay;
+	if ($auth_mode !== \FreePBX\modules\AuthMode::NONE->value) {
+		$auth_data = json_decode($auth_data, true) ?? [];
+	}
 	$delURL = '?display=paging&action=delete&extdisplay='.urlencode($extdisplay);
 } else {
 	$force_page = "0";
@@ -19,6 +22,8 @@ if($extdisplay){
 	$duplex = '0';
 	$volume = '0';
 	$description = '';
+	$auth_mode = \FreePBX\modules\AuthMode::NONE->value;
+	$auth_data = array();
 }
 $default_group = \FreePBX::Paging()->getDefaultGroup();
 $device_list = array();
@@ -286,6 +291,125 @@ foreach ($rec_list as $key => $value) {
 	</div>
 </div>
 <!--END Default Page Group-->
+<!--Authorization-->
+<div class="element-container">
+	<div class="row">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="form-group">
+					<div class="col-md-3">
+						<label class="control-label" for="authorization"><?php echo _("Authorization") ?></label>
+						<i class="fa fa-question-circle fpbx-help-icon" data-for="authorization"></i>
+					</div>
+					<div class="col-md-9 radioset">
+						<input type="radio" name="authorization" id="authorizationyes" value="1" <?php echo ($auth_mode !== \FreePBX\modules\AuthMode::NONE->value ?"CHECKED":"") ?>>
+						<label for="authorizationyes"><?php echo _("Yes");?></label>
+						<input type="radio" name="authorization" id="authorizationno" value="0" <?php echo ($auth_mode === \FreePBX\modules\AuthMode::NONE->value ?"CHECKED":"") ?>>
+						<label for="authorizationno"><?php echo _("No");?></label>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+			<span id="authorization-help" class="help-block fpbx-help-block"><?php echo _('Choose “Yes” to configure access restrictions, such as PIN codes or extension whitelists, for this paging group.')?></span>
+		</div>
+	</div>
+</div>
+<!--END Authorization-->
+<!--Authorization mode-->
+<div class="element-container paging-auth">
+	<div class="row">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="form-group">
+					<div class="col-md-3">
+						<label class="control-label" for="authorization-mode"><?php echo _("Mode of authorization") ?></label>
+						<i class="fa fa-question-circle fpbx-help-icon" data-for="authorization-mode"></i>
+					</div>
+					<div class="col-md-9">
+						<select name = "auth_mode" id = "auth_mode">
+						<?php foreach (\FreePBX\modules\AuthMode::cases() as $mode) {
+							if($mode->value === \FreePBX\modules\AuthMode::NONE->value) {
+								continue;
+							}
+							$selected = ($mode->value === $auth_mode)?'SELECTED':'';
+							echo "<option value=\"$mode->value\" $selected>{$mode->label()}</option>";
+						} ?>
+						</select>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+			<span id="authorization-mode-help" class="help-block fpbx-help-block">
+			<?php foreach (\FreePBX\modules\AuthMode::cases() as $mode) {
+				echo _("<b>{$mode->label()}:</b> {$mode->help()} ");
+			}?>
+			</span>
+		</div>
+	</div>
+</div>
+<!--END Authorization mode-->
+<!--PIN-->
+<div class="element-container paging-auth">
+	<div class="row">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="form-group">
+					<div class="col-md-3">
+						<label class="control-label" for="pin"><?php echo _("PIN") ?></label>
+						<i class="fa fa-question-circle fpbx-help-icon" data-for="pin"></i>
+					</div>
+					<div class="col-md-9">
+						<input type="text" class="form-control confidential" id="pin" name="pin" value="<?php
+						echo (!empty($auth_data['pin'])?$auth_data['pin']:'') ?>">
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+			<span id="pin-help" class="help-block fpbx-help-block"><?php echo _('Enter a numeric PIN code callers must enter to access this paging group')?></span>
+		</div>
+	</div>
+</div>
+<!--END PIN-->
+<!--Whitelist-->
+<div class="element-container paging-auth">
+	<div class="row">
+		<div class="col-md-12">
+			<div class="row">
+				<div class="form-group">
+					<div class="col-md-3">
+						<label class="control-label" for="whitelist"><?php echo _("Whitelist") ?></label>
+						<i class="fa fa-question-circle fpbx-help-icon" data-for="whitelist"></i>
+					</div>
+					<div class="col-md-9">
+						<select name ="whitelist[]" id = "whitelist" multiple="multiple">
+						<?php foreach ($device_list AS $ext => $name) {
+							//Check if this extension is already whitelisted
+							$in_whitelist = in_array($ext, $auth_data['whitelist'] ?? []);
+							$selected = $in_whitelist ? ' selected' : '';
+							echo "<option value=\"$ext\"$selected>$name</option>";
+						} ?>
+						</select>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-12">
+						<span id="authorization-help" class="help-block fpbx-help-block"><?php echo _('Select the extensions that are allowed to access this paging group. Only the listed extensions will be authorized, depending on the selected authorization mode.')?></span>
+		</div>
+	</div>
+</div>
+<!--END Whitelist-->
 <?php echo $hooks['hookContent'] ?>
 <?php echo $hooks['oldHooks'] ?>
 </form>

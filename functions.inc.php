@@ -694,7 +694,7 @@ function paging_get_config($engine) {
 
 		$apppagegroups = 'app-pagegroups';
 		// Now get a list of all the paging groups...
-		$sql = "SELECT page_group, force_page, duplex, announcement, volume FROM paging_config";
+		$sql = "SELECT page_group, force_page, duplex, announcement, volume, auth_mode, auth_data FROM paging_config";
 		$paging_groups = $db->getAll($sql, DB_FETCHMODE_ASSOC);
 
 		if (!$paging_groups) {
@@ -732,6 +732,35 @@ function paging_get_config($engine) {
 			//app-page dialplan
 
 			$ext->add($apppagegroups, $grp, '', new ext_macro('user-callerid'));
+			// Access control for this page group
+			$use_auth = false;
+			$use_whitelist = false;
+			$use_mixed = false;
+			$use_whitelist_pin = false;
+			if ($thisgroup['auth_mode'] !== \FreePBX\modules\AuthMode::NONE->value) {
+				$use_auth = true;
+				$auth_data = array();
+				$auth_data = json_decode($thisgroup['auth_data'], true) ?? [];
+				if ($thisgroup['auth_mode'] === \FreePBX\modules\AuthMode::WHITELIST->value && !empty($auth_data['whitelist'])) {
+					$use_whitelist = true;
+					$ext->add($apppagegroups, $grp, 'agi', new ext_agi('paging_acl.agi,' . $grp));
+					$ext->add($apppagegroups, $grp, '', new ext_gotoif('$["${is_authorized}" = "no" | "${is_authorized}" = ""]', 'not-authorized'));
+				} elseif ($thisgroup['auth_mode'] === \FreePBX\modules\AuthMode::PIN->value  && !empty($auth_data['pin'])) {
+					$ext->add($apppagegroups, $grp, '', new ext_authenticate($auth_data['pin']));
+				} elseif ($thisgroup['auth_mode'] === \FreePBX\modules\AuthMode::MIXED->value  &&
+					!empty($auth_data['pin']) && !empty($auth_data['whitelist'])) {
+					$use_mixed = true;
+					$ext->add($apppagegroups, $grp, 'agi', new ext_agi('paging_acl.agi,' . $grp));
+					$ext->add($apppagegroups, $grp, '', new ext_gosubif('$["${is_authorized}" = "no" | "${is_authorized}" = ""]', 'check-pin'));
+				} elseif ($thisgroup['auth_mode'] === \FreePBX\modules\AuthMode::WHITELIST_PIN->value  &&
+					!empty($auth_data['pin']) && !empty($auth_data['whitelist'])) {
+					$use_whitelist_pin = true;
+					$ext->add($apppagegroups, $grp, 'agi', new ext_agi('paging_acl.agi,' . $grp));
+					$ext->add($apppagegroups, $grp, '', new ext_gotoif('$["${is_authorized}" = "no" | "${is_authorized}" = ""]', 'not-authorized'));
+					$ext->add($apppagegroups, $grp, '', new ext_gosubif('$["${is_authorized}" = "yes"]', 'check-pin'));
+				}
+			} //End Access control
+
 			$ext->add($apppagegroups, $grp, '', new ext_set('_PAGEGROUP', $grp));
 			if(!empty($thisgroup['volume'])) {
 				$ext->add($apppagegroups, $grp, '', new ext_set('_PVOL', ($thisgroup['volume'] - 1))); //Sangoma Paging Volume adjustment
@@ -809,6 +838,23 @@ function paging_get_config($engine) {
 				$ext->add($apppagegroups, $grp, 'page', new ext_meetme('${PAGE_CONF}', 'dqwxAG'));
 			}
 			$ext->add($apppagegroups, $grp, '', new ext_hangup());
+			//Access control for this page group
+			if ($use_whitelist) {
+				$ext->add($apppagegroups, $grp, 'not-authorized', new ext_answer(''));
+				$ext->add($apppagegroups, $grp, '', new ext_playback('invalid'));
+				$ext->add($apppagegroups, $grp, '', new ext_goto('app-pagegroups,h,1'));
+			} elseif ($use_mixed) {
+				$ext->add($apppagegroups, $grp, 'check-pin', new ext_authenticate($auth_data['pin']));
+				$ext->add($apppagegroups, $grp, '', new ext_return(''));
+			} elseif ($use_whitelist_pin) {
+				//Add not-authorized for extensions not on the whitelist
+				$ext->add($apppagegroups, $grp, 'not-authorized', new ext_answer(''));
+				$ext->add($apppagegroups, $grp, '', new ext_playback('invalid'));
+				$ext->add($apppagegroups, $grp, '', new ext_goto('app-pagegroups,h,1'));
+				// Add check-pin for extensins on the whitelist
+				$ext->add($apppagegroups, $grp, 'check-pin', new ext_authenticate($auth_data['pin']));
+				$ext->add($apppagegroups, $grp, '', new ext_return(''));
+			}
 			$ext->add($apppagegroups, $grp, 'busy', new ext_set('PAGE${PAGEGROUP}BUSY', 'TRUE'));
 			$ext->add($apppagegroups, $grp, 'play-busy', new ext_busy(3));
 			$ext->add($apppagegroups, $grp, 'busy-hang', new ext_goto('app-pagegroups,h,1'));
@@ -943,7 +989,7 @@ function paging_get_pagingconfig($grp) {
 	return \FreePBX::Paging()->getPageGroupById($grp);
 }
 
-function paging_modify($oldxtn, $xtn, $plist, $force_page, $duplex, $description='', $default_group=0, $announcement=0, $volume=0) {
+function paging_modify($oldxtn, $xtn, $plist, $force_page, $duplex, $auth_mode, $auth_data, $description='', $default_group=0, $announcement=0, $volume=0) {
 	global $db;
 	// Just in case someone's trying to be smart with a SQL injection.
 	$xtn = $db->escapeSimple($xtn);
@@ -952,11 +998,7 @@ function paging_modify($oldxtn, $xtn, $plist, $force_page, $duplex, $description
 	paging_del($oldxtn);
 
 	// Now add it all back in.
-	paging_add($xtn, $plist, $force_page, $duplex, $description, $default_group, $announcement, $volume);
-
-	// Aaad we need a reload.
-	needreload();
-
+	return \FreePBX::Paging()->addGroup($xtn, $plist, $force_page, $duplex, $auth_mode, $auth_data, $description, $default_group, $announcement, $volume);
 }
 
 function paging_del($xtn) {

@@ -2,12 +2,13 @@
     <rawname>paging</rawname>
     <repo>standard</repo>
     <name>Paging and Intercom</name>
-    <version>17.0.3</version>
+    <version>17.0.4</version>
     <publisher>Sangoma Technologies Corporation</publisher>
     <license>GPLv3+</license>
     <licenselink>https://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
     <category>Applications</category>
     <changelog>
+	        *17.0.4* Add access control options
 		*17.0.3* Packaging of ver 17.0.3
 		*17.0.2* Packaging of ver 17.0.2
 		*17.0.1* 17.0.1 alpha release
@@ -42,6 +43,8 @@
             <field name="description" type="string" length="255" default=""/>
             <field name="announcement" type="string" length="255" notnull="false"/>
             <field name="volume" type="integer" default="0"/>
+            <field name="auth_mode" type="string" length="0" default="none"/>
+            <field name="auth_data" type="text" notnull="false"/>
         </table>
         <table name="paging_core_routing">
             <field name="route" type="string" length="25" default="" primaryKey="true"/>

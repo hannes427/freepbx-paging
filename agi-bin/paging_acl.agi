@@ -1,0 +1,41 @@
+#!/usr/bin/env php
+<?php
+$restrict_mods = true;
+$callerid = '';
+$page_group = '';
+$is_authorized = "no";
+include '/etc/freepbx.conf';
+$db = \FreePBX::Database();
+$agidir = FreePBX::Config()->get('ASTAGIDIR');
+require_once $agidir."/phpagi.php";
+$agi = new AGI();
+function agi_get_var($value) {
+	global $agi;
+	$r = $agi->get_variable($value);
+	if ($r['result'] == 1) {
+		$result = $r['data'];
+		return $result;
+	}
+	return '';
+}
+
+$callerid = agi_get_var("CALLERID(num)");
+$pagegroup = $argv['1'];
+
+// Get all allowed extensions for this page group
+$sql = 'SELECT auth_data FROM paging_config WHERE page_group = :pagegroup';
+$stmt = $db->prepare($sql);
+$stmt->execute(array(':pagegroup' => $pagegroup));
+$result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+//Check if the calling extension is allowed to use this page group
+$auth_data = json_decode($result[0]['auth_data'], true);
+//print_r($auth_data);
+if (array_key_exists('whitelist', $auth_data)) {
+	if (in_array($callerid, $auth_data['whitelist'])) {
+		$is_authorized = "yes";
+	}
+}
+
+echo "SET VARIABLE is_authorized $is_authorized\n";
+exit;
