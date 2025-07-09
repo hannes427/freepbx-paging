@@ -43,6 +43,10 @@ $(document).ready(function() {
 				}
 			}
 		}
+		//Vallidate Paging Extenssion
+		if (!/^[0-9*\/#]+$/.test(theForm.pagenbr.value.trim())) {
+			return warnInvalid(theForm.pagenbr, _("Please enter a valid Extension."));
+		}
 		return true;
 	});
 });
