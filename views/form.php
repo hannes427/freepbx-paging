@@ -405,7 +405,7 @@ foreach ($rec_list as $key => $value) {
 	</div>
 	<div class="row">
 		<div class="col-md-12">
-						<span id="authorization-help" class="help-block fpbx-help-block"><?php echo _('Select the extensions that are allowed to access this paging group. Only the listed extensions will be authorized, depending on the selected authorization mode.')?></span>
+			<span id="whitelist-help" class="help-block fpbx-help-block"><?php echo _('Select the extensions that are allowed to access this paging group. Only the listed extensions will be authorized, depending on the selected authorization mode.')?></span>
 		</div>
 	</div>
 </div>
